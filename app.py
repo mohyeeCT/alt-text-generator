@@ -1,32 +1,41 @@
+import streamlit as st
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from PIL import Image
-import os
+import io
 
-# Initialize BLIP processor and model with use_fast=True for faster processing and to remove warning
-processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base", use_fast=True)
-model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+# Load model and processor once
+@st.cache_resource
+def load_model():
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+    return processor, model
 
-# Folder containing images - update this path before running
-image_folder = "path_to_your_image_folder"
-output_file = "alt_texts.csv"
+processor, model = load_model()
 
-with open(output_file, "w", encoding="utf-8") as f_out:
-    f_out.write("image_filename,alt_text\n")
+st.title("Bulk Alt Text Generator")
 
-    for filename in os.listdir(image_folder):
-        if filename.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif")):
-            image_path = os.path.join(image_folder, filename)
-            image = Image.open(image_path).convert('RGB')
+uploaded_files = st.file_uploader("Upload images", type=["png", "jpg", "jpeg", "bmp", "gif"], accept_multiple_files=True)
 
-            # Prepare inputs
-            inputs = processor(image, return_tensors="pt")
+if uploaded_files:
+    st.write(f"Processing {len(uploaded_files)} images...")
+    results = []
 
-            # Generate caption
-            out = model.generate(**inputs)
-            caption = processor.decode(out[0], skip_special_tokens=True)
+    for uploaded_file in uploaded_files:
+        image = Image.open(io.BytesIO(uploaded_file.read())).convert("RGB")
 
-            # Write filename and alt text to CSV
-            f_out.write(f'"{filename}","{caption}"\n')
-            print(f"Processed {filename}: {caption}")
+        inputs = processor(image, return_tensors="pt")
+        out = model.generate(**inputs)
+        caption = processor.decode(out[0], skip_special_tokens=True)
 
-print(f"Alt text generation completed. Results saved in {output_file}")
+        results.append((uploaded_file.name, caption))
+
+    # Show results in a table
+    st.write("### Generated Alt Texts")
+    for filename, alt_text in results:
+        st.write(f"**{filename}**: {alt_text}")
+
+    # Option to download CSV
+    import pandas as pd
+    df = pd.DataFrame(results, columns=["Filename", "Alt Text"])
+    csv = df.to_csv(index=False)
+    st.download_button("Download CSV", csv, "alt_texts.csv", "text/csv")
