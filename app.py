@@ -7,15 +7,15 @@ import pandas as pd
 
 @st.cache_resource
 def load_model():
-    processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-    model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl")
+    processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-base")
+    model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-base")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     return processor, model, device
 
 processor, model, device = load_model()
 
-st.title("Accurate Bulk Alt Text Generator with BLIP-2")
+st.title("Faster Bulk Alt Text Generator with BLIP-2 Base")
 
 uploaded_files = st.file_uploader(
     "Upload images",
@@ -23,7 +23,7 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
 )
 
-batch_size = 2  # BLIP-2 is larger, smaller batch to avoid OOM
+batch_size = 2
 
 if uploaded_files:
     st.write(f"Processing {len(uploaded_files)} images...")
