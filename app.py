@@ -1,10 +1,9 @@
 import streamlit as st
 import openai
 import base64
-import io
 
-# Hardcoded OpenAI API key (replace with your actual key)
-openai.api_key = "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"
+# Initialize new OpenAI client
+client = openai.OpenAI(api_key="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")
 
 st.title("Alt Text Generator with GPT-4 Vision")
 
@@ -23,9 +22,9 @@ if uploaded_file is not None:
 
     if st.button("Generate Alt Text"):
         with st.spinner("Generating alt text..."):
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
             )
-            alt_text = response['choices'][0]['message']['content']
+            alt_text = response.choices[0].message.content
             st.text_area("Generated Alt Text", value=alt_text, height=150)
