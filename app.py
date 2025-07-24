@@ -1,55 +1,34 @@
 import streamlit as st
-from google.cloud import vision
-from google.oauth2 import service_account
-from PIL import Image
+import openai
+import base64
 import io
-import json
-import pandas as pd
 
-# Step 1: Upload the service account JSON key
-key_file = st.file_uploader("Upload Google Cloud Service Account JSON Key", type=["json"])
+# Set your OpenAI API key
+openai.api_key = st.secrets["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"]
 
-client = None
-if key_file is not None:
-    # Step 2: Load credentials from uploaded file
-    key_json = json.load(key_file)
-    credentials = service_account.Credentials.from_service_account_info(key_json)
-    client = vision.ImageAnnotatorClient(credentials=credentials)
-    st.success("Google Cloud Vision client initialized.")
+st.title("Alt Text Generator with GPT-4 Vision")
 
-def generate_alt_text(image_bytes, client):
-    image = vision.Image(content=image_bytes)
-    response = client.label_detection(image=image)
-    labels = response.label_annotations
+uploaded_file = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg", "bmp", "gif"])
 
-    if response.error.message:
-        st.error(f"API error: {response.error.message}")
-        return "Error generating alt text"
+if uploaded_file is not None:
+    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
 
-    alt_text = ', '.join(label.description for label in labels[:5])
-    return alt_text
+    # Convert image to base64 for prompt
+    image_bytes = uploaded_file.read()
+    encoded_image = base64.b64encode(image_bytes).decode()
 
-st.title("Alt Text Generator with Google Cloud Vision API")
+    prompt = (
+        "Describe the following image in a detailed way suitable for alt text:\n"
+        f"data:image/jpeg;base64,{encoded_image}"
+    )
 
-uploaded_files = st.file_uploader(
-    "Upload images",
-    type=["png", "jpg", "jpeg", "bmp", "gif"],
-    accept_multiple_files=True,
-)
-
-if uploaded_files and client is not None:
-    st.write(f"Processing {len(uploaded_files)} images...")
-    alt_texts = []
-
-    for uploaded_file in uploaded_files:
-        image_bytes = uploaded_file.read()
-        alt_text = generate_alt_text(image_bytes, client)
-        alt_texts.append(alt_text)
-        st.write(f"**{uploaded_file.name}**: {alt_text}")
-
-    df = pd.DataFrame({"Filename": [f.name for f in uploaded_files], "Alt Text": alt_texts})
-    csv = df.to_csv(index=False)
-    st.download_button("Download CSV", csv, "alt_texts.csv", "text/csv")
-
-elif key_file is None:
-    st.info("Please upload your Google Cloud service account JSON key to get started.")
+    if st.button("Generate Alt Text"):
+        with st.spinner("Generating alt text..."):
+            response = openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            alt_text = response['choices'][0]['message']['content']
+            st.text_area("Generated Alt Text", value=alt_text, height=150)
