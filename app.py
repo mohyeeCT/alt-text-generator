@@ -1,29 +1,35 @@
 import streamlit as st
-from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
+from google.cloud import vision
+from google.oauth2 import service_account
 from PIL import Image
-import torch
 import io
+import json
 import pandas as pd
 
-@st.cache_resource
-def load_model():
-    model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-    feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-    tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    return model, feature_extractor, tokenizer, device
+# Step 1: Upload the service account JSON key
+key_file = st.file_uploader("Upload Google Cloud Service Account JSON Key", type=["json"])
 
-model, feature_extractor, tokenizer, device = load_model()
+client = None
+if key_file is not None:
+    # Step 2: Load credentials from uploaded file
+    key_json = json.load(key_file)
+    credentials = service_account.Credentials.from_service_account_info(key_json)
+    client = vision.ImageAnnotatorClient(credentials=credentials)
+    st.success("Google Cloud Vision client initialized.")
 
-def generate_caption(image):
-    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
-    # Use greedy decoding (num_beams=1) to avoid NotImplementedError
-    output_ids = model.generate(pixel_values, max_length=40, num_beams=1)
-    caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return caption
+def generate_alt_text(image_bytes, client):
+    image = vision.Image(content=image_bytes)
+    response = client.label_detection(image=image)
+    labels = response.label_annotations
 
-st.title("Alt Text Generator with ViT-GPT2")
+    if response.error.message:
+        st.error(f"API error: {response.error.message}")
+        return "Error generating alt text"
+
+    alt_text = ', '.join(label.description for label in labels[:5])
+    return alt_text
+
+st.title("Alt Text Generator with Google Cloud Vision API")
 
 uploaded_files = st.file_uploader(
     "Upload images",
@@ -31,16 +37,19 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
 )
 
-if uploaded_files:
+if uploaded_files and client is not None:
     st.write(f"Processing {len(uploaded_files)} images...")
     alt_texts = []
 
     for uploaded_file in uploaded_files:
-        image = Image.open(io.BytesIO(uploaded_file.read())).convert("RGB")
-        caption = generate_caption(image)
-        alt_texts.append(caption)
-        st.write(f"**{uploaded_file.name}**: {caption}")
+        image_bytes = uploaded_file.read()
+        alt_text = generate_alt_text(image_bytes, client)
+        alt_texts.append(alt_text)
+        st.write(f"**{uploaded_file.name}**: {alt_text}")
 
     df = pd.DataFrame({"Filename": [f.name for f in uploaded_files], "Alt Text": alt_texts})
     csv = df.to_csv(index=False)
     st.download_button("Download CSV", csv, "alt_texts.csv", "text/csv")
+
+elif key_file is None:
+    st.info("Please upload your Google Cloud service account JSON key to get started.")
