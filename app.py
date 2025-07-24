@@ -17,11 +17,9 @@ def load_model():
 model, feature_extractor, tokenizer, device = load_model()
 
 def generate_caption(image):
-    # Preprocess image
     pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
-    # Generate caption ids
-    output_ids = model.generate(pixel_values, max_length=40, num_beams=4)
-    # Decode caption
+    # Use greedy decoding (num_beams=1) to avoid NotImplementedError
+    output_ids = model.generate(pixel_values, max_length=40, num_beams=1)
     caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     return caption
 
